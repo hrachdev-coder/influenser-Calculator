@@ -8,6 +8,7 @@ dotenv.config()
 const app = express()
 const port = 5000
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+const groqModel = process.env.GROQ_MODEL || 'llama-3.1-8b-instant'
 const huggingFaceModel = process.env.HUGGINGFACE_MODEL || 'HuggingFaceH4/zephyr-7b-beta'
 const huggingFaceFallbackModels = (process.env.HUGGINGFACE_FALLBACK_MODELS || 'Qwen/Qwen2.5-7B-Instruct,HuggingFaceH4/zephyr-7b-beta,google/flan-t5-large')
   .split(',')
@@ -19,6 +20,7 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null
 const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY || ''
+const groqApiKey = process.env.GROQ_API_KEY || ''
 
 app.use(cors())
 app.use(express.json())
@@ -107,8 +109,13 @@ function getSafeErrorDetails(error) {
 
 function resolveProviderOrder() {
   const available = {
+    groq: Boolean(groqApiKey),
     huggingface: Boolean(huggingFaceApiKey),
     openai: Boolean(openai),
+  }
+
+  if (aiProvider === 'groq') {
+    return available.groq ? ['groq'] : []
   }
 
   if (aiProvider === 'huggingface') {
@@ -120,6 +127,9 @@ function resolveProviderOrder() {
   }
 
   const providers = []
+  if (available.groq) {
+    providers.push('groq')
+  }
   if (available.huggingface) {
     providers.push('huggingface')
   }
@@ -206,6 +216,44 @@ async function generateReplyWithAI({ brandMessage, targetPrice, offerStatus, neg
   return response.output_text?.trim() || generateReply({ brandMessage, targetPrice, offerStatus })
 }
 
+async function generateReplyWithGroq({ brandMessage, targetPrice, offerStatus, negotiationContext }) {
+  const systemPrompt =
+    'You are an assistant helping content creators negotiate brand collaborations. Write concise, professional, confident, and polite replies. Never be aggressive. Output only the reply message body with greeting and sign-off.'
+
+  const userPrompt = [
+    `Brand message: ${brandMessage}`,
+    `Offer status: ${offerStatus}`,
+    `Target price in USD: ${targetPrice}`,
+    `Negotiation context: ${JSON.stringify(negotiationContext || {})}`,
+    'Write a reply that thanks the brand, references value delivered, and proposes the target price clearly.',
+  ].join('\n')
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${groqApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: groqModel,
+      temperature: 0.7,
+      max_tokens: 260,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const bodyText = await response.text()
+    throw new Error(`Groq request failed with status ${response.status}: ${bodyText.slice(0, 180)}`)
+  }
+
+  const data = await response.json()
+  return data?.choices?.[0]?.message?.content?.trim() || null
+}
+
 async function generateReplyWithHuggingFace({ brandMessage, targetPrice, offerStatus, negotiationContext }) {
   const systemPrompt =
     'You help creators negotiate brand deals. Write concise, professional, confident, and polite replies. Output only the final reply.'
@@ -290,6 +338,17 @@ async function generateReplyWithProvider(payload) {
 
   for (const provider of providerOrder) {
     try {
+      if (provider === 'groq') {
+        const reply = await generateReplyWithGroq(payload)
+        if (reply) {
+          return {
+            reply,
+            source: 'groq',
+            model: groqModel,
+          }
+        }
+      }
+
       if (provider === 'huggingface') {
         const result = await generateReplyWithHuggingFace(payload)
         if (result?.reply) {
@@ -350,6 +409,7 @@ app.post('/api/reply', async (req, res) => {
         fallbackResponse.debug = {
           reason: 'NO_AI_PROVIDER_CONFIGURED',
           aiProvider,
+          groqModel,
           openaiModel,
           huggingFaceModel,
         }
@@ -370,6 +430,7 @@ app.post('/api/reply', async (req, res) => {
       fallbackResponse.debug = {
         reason: 'AI_REQUEST_FAILED',
         aiProvider,
+        groqModel,
         openaiModel,
         huggingFaceModel,
         error: getSafeErrorDetails(error),

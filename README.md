@@ -9,7 +9,7 @@ Creator Deal Assistant is a SaaS-style MVP that helps content creators:
 
 - Frontend: React + Tailwind (Vite)
 - Backend: Node.js + Express
-- AI: Hugging Face Inference API (free tier) or OpenAI, with safe template fallback
+- AI: Groq (free tier), Hugging Face Inference API, or OpenAI with safe template fallback
 
 ## Setup
 
@@ -22,6 +22,9 @@ Creator Deal Assistant is a SaaS-style MVP that helps content creators:
 	Copy `.env.example` to `.env` and set your keys:
 
 	AI_PROVIDER=auto
+	GROQ_API_KEY=your_groq_api_key_here
+	GROQ_MODEL=llama-3.1-8b-instant
+
 	HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 	HUGGINGFACE_MODEL=HuggingFaceH4/zephyr-7b-beta
 
@@ -36,7 +39,8 @@ The app runs with Vite on the client and Express API on port 5000.
 
 ## AI Reply Generator Behavior
 
-- If `AI_PROVIDER=auto`, the app tries Hugging Face first, then OpenAI.
+- If `AI_PROVIDER=auto`, the app tries Groq, then Hugging Face, then OpenAI.
+- If `AI_PROVIDER=groq`, it uses Groq only.
 - If `AI_PROVIDER=huggingface`, it uses Hugging Face only.
 - If `AI_PROVIDER=openai`, it uses OpenAI only.
 - If provider keys are missing or API calls fail, the server falls back to a built-in professional template reply so the feature keeps working.
@@ -49,6 +53,9 @@ The app runs with Vite on the client and Express API on port 5000.
 4. Add environment variables in Vercel Project Settings:
 
 	AI_PROVIDER=auto
+	GROQ_API_KEY=your_groq_api_key_here
+	GROQ_MODEL=llama-3.1-8b-instant
+
 	HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 	HUGGINGFACE_MODEL=HuggingFaceH4/zephyr-7b-beta
 
