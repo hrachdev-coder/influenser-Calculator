@@ -7,6 +7,8 @@ const ToolsPage = lazy(() => import('./pages/ToolsPage'))
 const PricingPage = lazy(() => import('./pages/PricingPage'))
 const AboutPage = lazy(() => import('./pages/AboutPage'))
 
+
+
 function App() {
   return (
     <Suspense
