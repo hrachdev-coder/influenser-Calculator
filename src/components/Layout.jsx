@@ -33,7 +33,7 @@ export default function Layout() {
           </div>
 
           <div className="hidden lg:flex lg:items-center lg:gap-3">
-            <nav className="flex flex-wrap gap-2 rounded-full bg-[rgba(255,255,255,0.03)] p-1.5">
+            <nav aria-label="Primary" className="flex flex-wrap gap-2 rounded-full bg-[rgba(255,255,255,0.03)] p-1.5">
               {navigation.map((item) => (
                 <NavLink key={item.to} to={item.to} className={linkClass} end={item.to === '/'}>
                   {item.label}
@@ -44,6 +44,7 @@ export default function Layout() {
 
           <NavLink
             to="/tools"
+            aria-label="Open tools"
             className="inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2.5 text-xs font-semibold text-slate-950 shadow-[0_10px_24px_rgba(0,200,83,0.24)] transition hover:opacity-95 sm:px-5 sm:py-3 sm:text-sm"
           >
             Try App
@@ -53,12 +54,13 @@ export default function Layout() {
 
       <Outlet />
 
-      <nav className="fixed bottom-3 left-1/2 z-30 flex w-[min(94vw,520px)] -translate-x-1/2 items-center justify-between gap-1 rounded-[1.3rem] border border-[rgba(248,250,252,0.12)] bg-[rgba(16,24,39,0.92)] p-1.5 shadow-[0_20px_45px_rgba(2,6,23,0.55)] backdrop-blur-xl lg:hidden">
+      <nav aria-label="Bottom navigation" className="fixed bottom-3 left-1/2 z-30 flex w-[min(94vw,520px)] -translate-x-1/2 items-center justify-between gap-1 rounded-[1.3rem] border border-[rgba(248,250,252,0.12)] bg-[rgba(16,24,39,0.92)] p-1.5 shadow-[0_20px_45px_rgba(2,6,23,0.55)] backdrop-blur-xl lg:hidden">
         {navigation.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            aria-label={item.label}
             className={({ isActive }) =>
               isActive
                 ? 'flex min-w-[72px] flex-1 flex-col items-center justify-center rounded-xl bg-[rgba(108,92,231,0.26)] px-2 py-2 text-[11px] font-semibold text-white'
