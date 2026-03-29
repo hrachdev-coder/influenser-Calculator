@@ -2,6 +2,10 @@ import OpenAI from 'openai'
 
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 const huggingFaceModel = process.env.HUGGINGFACE_MODEL || 'HuggingFaceH4/zephyr-7b-beta'
+const huggingFaceFallbackModels = (process.env.HUGGINGFACE_FALLBACK_MODELS || 'Qwen/Qwen2.5-7B-Instruct,HuggingFaceH4/zephyr-7b-beta,google/flan-t5-large')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
 const aiProvider = process.env.AI_PROVIDER || 'auto'
 const includeDebug = process.env.NODE_ENV !== 'production'
 const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY || ''
@@ -208,34 +212,64 @@ async function generateReplyWithHuggingFace({ brandMessage, targetPrice, offerSt
   ].join('\n')
 
   const prompt = `<s>[INST] ${systemPrompt}\n\n${userPrompt} [/INST]`
+  const modelCandidates = [...new Set([huggingFaceModel, ...huggingFaceFallbackModels])]
+  let lastError = null
 
-  const response = await fetch(`https://api-inference.huggingface.co/models/${huggingFaceModel}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${huggingFaceApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 240,
-        temperature: 0.75,
-        return_full_text: false,
-      },
-    }),
-  })
+  for (const modelCandidate of modelCandidates) {
+    const endpoints = [
+      `https://router.huggingface.co/hf-inference/models/${modelCandidate}`,
+      `https://api-inference.huggingface.co/models/${modelCandidate}`,
+    ]
 
-  if (!response.ok) {
-    throw new Error(`Hugging Face request failed with status ${response.status}`)
+    for (const endpoint of endpoints) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${huggingFaceApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            max_new_tokens: 240,
+            temperature: 0.75,
+            return_full_text: false,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        const bodyText = await response.text()
+        lastError = new Error(`Hugging Face request failed with status ${response.status} for ${modelCandidate}: ${bodyText.slice(0, 180)}`)
+
+        if (response.status === 404 || response.status === 410 || response.status === 503) {
+          continue
+        }
+
+        throw lastError
+      }
+
+      const data = await response.json()
+      const generatedText =
+        (Array.isArray(data) && data[0]?.generated_text) ||
+        data?.generated_text ||
+        ''
+
+      const reply = String(generatedText).trim()
+      if (reply) {
+        return {
+          reply,
+          modelUsed: modelCandidate,
+        }
+      }
+    }
   }
 
-  const data = await response.json()
-  const generatedText =
-    (Array.isArray(data) && data[0]?.generated_text) ||
-    data?.generated_text ||
-    ''
+  if (lastError) {
+    throw lastError
+  }
 
-  return String(generatedText).trim() || null
+  return null
 }
 
 async function generateReplyWithProvider(payload) {
@@ -250,9 +284,13 @@ async function generateReplyWithProvider(payload) {
   for (const provider of providerOrder) {
     try {
       if (provider === 'huggingface') {
-        const reply = await generateReplyWithHuggingFace(payload)
-        if (reply) {
-          return { reply, source: 'huggingface' }
+        const result = await generateReplyWithHuggingFace(payload)
+        if (result?.reply) {
+          return {
+            reply: result.reply,
+            source: 'huggingface',
+            model: result.modelUsed,
+          }
         }
       }
 
